@@ -29,12 +29,6 @@ devenv/
 # Docker
 docker/pgdata/
 
-# Server keys (sensitive)
-ns-server/
-
-# Cleanup script (one-time use)
-cleanup_old.sh
-
 # Testing
 .coverage
 htmlcov/
