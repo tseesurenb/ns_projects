@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRM — Multi-Tenant SaaS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.5/babel.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet" />
+  <style>
+    body { background: #0f172a; min-height: 100vh; color: #e2e8f0; }
+    .sidebar { background: rgba(15, 23, 42, 0.95); border-right: 1px solid rgba(148,163,184,0.1); }
+    .card { background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.1); }
+    .input-field { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); transition: border-color 0.2s; color: #e2e8f0; }
+    .input-field:focus { border-color: #6366f1; outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+    .btn-primary { background: linear-gradient(135deg, #6366f1, #4f46e5); transition: transform 0.15s; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+    .btn-secondary { background: rgba(51, 65, 85, 0.6); border: 1px solid rgba(148,163,184,0.2); }
+    .btn-secondary:hover { background: rgba(51, 65, 85, 0.9); }
+    .btn-danger { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.25); }
+    .nav-item { transition: all 0.15s; cursor: pointer; }
+    .nav-item:hover { background: rgba(99,102,241,0.1); }
+    .nav-item.active { background: rgba(99,102,241,0.15); border-right: 3px solid #6366f1; color: #a5b4fc; }
+    .table-row:hover { background: rgba(99,102,241,0.05); }
+    .badge { padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+    .badge-active { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge-inactive { background: rgba(148,163,184,0.15); color: #94a3b8; }
+    .badge-owner { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .badge-admin { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .badge-member { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge-viewer { background: rgba(148,163,184,0.15); color: #94a3b8; }
+    .badge-goods { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .badge-service { background: rgba(168,85,247,0.15); color: #c084fc; }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .modal-overlay { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+    .lang-btn { transition: all 0.2s; }
+    .lang-btn.active { background: rgba(99,102,241,0.2); border-color: #6366f1; color: #a5b4fc; }
+    .lang-btn:not(.active) { background: transparent; border-color: rgba(148,163,184,0.2); color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+    const API = "http://127.0.0.1:8000/api/v1";
+
+    // ==================== Translations ====================
+    const T = {
+      mn: {
+        // Nav
+        users: "Хэрэглэгчид", products: "Бүтээгдэхүүн", categories: "Ангилал", logout: "Гарах",
+        // Common
+        add: "Нэмэх", save: "Хадгалах", cancel: "Болих", delete: "Устгах", edit: "Засах",
+        search: "Хайх...", loading: "Ачаалж байна...", noData: "Мэдээлэл олдсонгүй",
+        actions: "Үйлдэл", status: "Төлөв", name: "Нэр",
+        active: "Идэвхтэй", inactive: "Идэвхгүй",
+        // Users
+        addUser: "Хэрэглэгч нэмэх", editUser: "Хэрэглэгч засах",
+        fullName: "Бүтэн нэр", email: "Имэйл", password: "Нууц үг", role: "Эрх",
+        roleOwner: "Эзэмшигч", roleAdmin: "Админ", roleMember: "Гишүүн", roleViewer: "Үзэгч",
+        // Products
+        addProduct: "Бүтээгдэхүүн нэмэх", editProduct: "Бүтээгдэхүүн засах", productName: "Нэр",
+        productType: "Төрөл", goods: "Бараа", service: "Үйлчилгээ", sku: "SKU код",
+        description: "Тайлбар", unitPrice: "Нэгж үнэ", currency: "Валют", unit: "Нэгж", stockQty: "Нөөцийн тоо",
+        category: "Ангилал", noCategory: "Ангилалгүй",
+        // Categories
+        addCategory: "Ангилал нэмэх", catName: "Ангиллын нэр", parentCat: "Эцэг ангилал", noneParent: "Байхгүй",
+        // Auth
+        notLoggedIn: "Та нэвтрээгүй байна", goLogin: "Нэвтрэх хуудас руу очих",
+      },
+      en: {
+        users: "Users", products: "Products", categories: "Categories", logout: "Logout",
+        add: "Add", save: "Save", cancel: "Cancel", delete: "Delete", edit: "Edit",
+        search: "Search...", loading: "Loading...", noData: "No data found",
+        actions: "Actions", status: "Status", name: "Name",
+        active: "Active", inactive: "Inactive",
+        addUser: "Add User", editUser: "Edit User",
+        fullName: "Full Name", email: "Email", password: "Password", role: "Role",
+        roleOwner: "Owner", roleAdmin: "Admin", roleMember: "Member", roleViewer: "Viewer",
+        addProduct: "Add Product", editProduct: "Edit Product", productName: "Name",
+        productType: "Type", goods: "Goods", service: "Service", sku: "SKU",
+        description: "Description", unitPrice: "Unit Price", currency: "Currency", unit: "Unit", stockQty: "Stock Qty",
+        category: "Category", noCategory: "No category",
+        addCategory: "Add Category", catName: "Category Name", parentCat: "Parent Category", noneParent: "None",
+        notLoggedIn: "You are not logged in", goLogin: "Go to login page",
+      }
+    };
+
+    // ==================== API Helper ====================
+    function api(path, opts = {}) {
+      const token = localStorage.getItem("token");
+      return fetch(`${API}${path}`, {
+        ...opts,
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, ...opts.headers },
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      }).then(r => { if (r.status === 204) return null; return r.json(); });
+    }
+
+    // ==================== Modal ====================
+    function Modal({ show, onClose, title, children }) {
+      if (!show) return null;
+      return (
+        <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="card rounded-2xl p-6 w-full max-w-lg max-h-screen overflow-y-auto fade-in" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== Users Page ====================
+    function UsersPage({ t }) {
+      const [items, setItems] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [showModal, setShowModal] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [search, setSearch] = useState("");
+      const [form, setForm] = useState({ full_name: "", email: "", password: "", role: "member" });
+
+      const load = useCallback(() => {
+        setLoading(true);
+        api(`/users?per_page=100${search ? `&search=${search}` : ""}`).then(d => { setItems(d.items || []); setLoading(false); });
+      }, [search]);
+
+      useEffect(() => { load(); }, [load]);
+
+      const openAdd = () => { setEditing(null); setForm({ full_name: "", email: "", password: "", role: "member" }); setShowModal(true); };
+      const openEdit = (u) => { setEditing(u); setForm({ full_name: u.full_name, email: u.email, password: "", role: u.role }); setShowModal(true); };
+
+      const handleSave = async () => {
+        if (editing) {
+          const body = { full_name: form.full_name, role: form.role };
+          await api(`/users/${editing.id}`, { method: "PUT", body });
+        } else {
+          await api("/users", { method: "POST", body: form });
+        }
+        setShowModal(false); load();
+      };
+      const handleDelete = async (id) => { await api(`/users/${id}`, { method: "DELETE" }); load(); };
+
+      const roleBadge = (role) => {
+        const map = { owner: ["badge-owner", t.roleOwner], admin: ["badge-admin", t.roleAdmin], member: ["badge-member", t.roleMember], viewer: ["badge-viewer", t.roleViewer] };
+        const [cls, label] = map[role] || ["badge-member", role];
+        return <span className={`badge ${cls}`}>{label}</span>;
+      };
+
+      return (
+        <div className="fade-in">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">{t.users}</h2>
+            <button onClick={openAdd} className="btn-primary px-4 py-2 rounded-lg text-white font-medium text-sm">{t.addUser}</button>
+          </div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search} className="input-field w-full px-4 py-2 rounded-lg mb-4" />
+          {loading ? <p className="text-gray-500">{t.loading}</p> : items.length === 0 ? <p className="text-gray-500">{t.noData}</p> : (
+            <div className="card rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-gray-700 text-gray-400 text-left">
+                  <th className="p-3">{t.fullName}</th><th className="p-3">{t.email}</th><th className="p-3">{t.role}</th><th className="p-3">{t.status}</th><th className="p-3">{t.actions}</th>
+                </tr></thead>
+                <tbody>{items.map(u => (
+                  <tr key={u.id} className="table-row border-b border-gray-800">
+                    <td className="p-3 font-medium text-white">{u.full_name}</td>
+                    <td className="p-3 text-gray-400">{u.email}</td>
+                    <td className="p-3">{roleBadge(u.role)}</td>
+                    <td className="p-3"><span className={`badge ${u.is_active ? "badge-active" : "badge-inactive"}`}>{u.is_active ? t.active : t.inactive}</span></td>
+                    <td className="p-3 flex gap-2">
+                      <button onClick={() => openEdit(u)} className="btn-secondary px-3 py-1 rounded text-xs">{t.edit}</button>
+                      {u.role !== "owner" && <button onClick={() => handleDelete(u.id)} className="btn-danger px-3 py-1 rounded text-xs">{t.delete}</button>}
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+          <Modal show={showModal} onClose={() => setShowModal(false)} title={editing ? t.editUser : t.addUser}>
+            <div className="space-y-3">
+              <div><label className="block text-sm text-gray-400 mb-1">{t.fullName}</label>
+              <input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+              {!editing && (
+                <>
+                  <div><label className="block text-sm text-gray-400 mb-1">{t.email}</label>
+                  <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+                  <div><label className="block text-sm text-gray-400 mb-1">{t.password}</label>
+                  <input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="••••••" className="input-field w-full px-3 py-2 rounded-lg" /></div>
+                </>
+              )}
+              <div><label className="block text-sm text-gray-400 mb-1">{t.role}</label>
+              <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg">
+                <option value="admin">{t.roleAdmin}</option>
+                <option value="member">{t.roleMember}</option>
+                <option value="viewer">{t.roleViewer}</option>
+              </select></div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={handleSave} className="btn-primary px-4 py-2 rounded-lg text-white font-medium text-sm flex-1">{t.save}</button>
+                <button onClick={() => setShowModal(false)} className="btn-secondary px-4 py-2 rounded-lg text-sm flex-1">{t.cancel}</button>
+              </div>
+            </div>
+          </Modal>
+        </div>
+      );
+    }
+
+    // ==================== Products Page ====================
+    function ProductsPage({ t }) {
+      const [items, setItems] = useState([]);
+      const [categories, setCategories] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [showModal, setShowModal] = useState(false);
+      const [showCatModal, setShowCatModal] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [search, setSearch] = useState("");
+      const [form, setForm] = useState({ name: "", product_type: "goods", category_id: "", sku: "", description: "", unit_price: 0, currency: "MNT", unit: "ширхэг", stock_quantity: "", is_active: true });
+      const [catForm, setCatForm] = useState({ name: "", description: "", parent_id: "" });
+
+      const loadProducts = useCallback(() => {
+        setLoading(true);
+        api(`/products?per_page=100&active_only=false${search ? `&search=${search}` : ""}`).then(d => { setItems(d.items || []); setLoading(false); });
+      }, [search]);
+      const loadCategories = () => api("/categories").then(d => setCategories(d || []));
+
+      useEffect(() => { loadProducts(); loadCategories(); }, [loadProducts]);
+
+      const openAdd = () => { setEditing(null); setForm({ name: "", product_type: "goods", category_id: "", sku: "", description: "", unit_price: 0, currency: "MNT", unit: "ширхэг", stock_quantity: "", is_active: true }); setShowModal(true); };
+      const openEdit = (p) => { setEditing(p); setForm({ name: p.name, product_type: p.product_type, category_id: p.category_id || "", sku: p.sku || "", description: p.description || "", unit_price: p.unit_price, currency: p.currency, unit: p.unit, stock_quantity: p.stock_quantity ?? "", is_active: p.is_active }); setShowModal(true); };
+
+      const handleSave = async () => {
+        const body = { ...form, category_id: form.category_id || null, stock_quantity: form.stock_quantity === "" ? null : parseInt(form.stock_quantity), unit_price: parseFloat(form.unit_price) };
+        if (editing) { await api(`/products/${editing.id}`, { method: "PUT", body }); }
+        else { await api("/products", { method: "POST", body }); }
+        setShowModal(false); loadProducts();
+      };
+      const handleDelete = async (id) => { await api(`/products/${id}`, { method: "DELETE" }); loadProducts(); };
+      const handleSaveCat = async () => { await api("/categories", { method: "POST", body: { ...catForm, parent_id: catForm.parent_id || null } }); setShowCatModal(false); loadCategories(); };
+
+      const catName = (id) => { const c = categories.find(c => c.id === id); return c ? c.name : "—"; };
+
+      return (
+        <div className="fade-in">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">{t.products}</h2>
+            <div className="flex gap-2">
+              <button onClick={() => { setCatForm({ name: "", description: "", parent_id: "" }); setShowCatModal(true); }} className="btn-secondary px-4 py-2 rounded-lg text-sm">{t.addCategory}</button>
+              <button onClick={openAdd} className="btn-primary px-4 py-2 rounded-lg text-white font-medium text-sm">{t.addProduct}</button>
+            </div>
+          </div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search} className="input-field w-full px-4 py-2 rounded-lg mb-4" />
+          {loading ? <p className="text-gray-500">{t.loading}</p> : items.length === 0 ? <p className="text-gray-500">{t.noData}</p> : (
+            <div className="card rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-gray-700 text-gray-400 text-left">
+                  <th className="p-3">{t.productName}</th><th className="p-3">{t.productType}</th><th className="p-3">{t.category}</th><th className="p-3">{t.unitPrice}</th><th className="p-3">{t.actions}</th>
+                </tr></thead>
+                <tbody>{items.map(p => (
+                  <tr key={p.id} className="table-row border-b border-gray-800">
+                    <td className="p-3 font-medium text-white">{p.name} {!p.is_active && <span className="badge badge-inactive ml-1">{t.inactive}</span>}</td>
+                    <td className="p-3"><span className={`badge ${p.product_type === "goods" ? "badge-goods" : "badge-service"}`}>{p.product_type === "goods" ? t.goods : t.service}</span></td>
+                    <td className="p-3 text-gray-400">{catName(p.category_id)}</td>
+                    <td className="p-3 text-gray-300">{Number(p.unit_price).toLocaleString()} {p.currency}/{p.unit}</td>
+                    <td className="p-3 flex gap-2">
+                      <button onClick={() => openEdit(p)} className="btn-secondary px-3 py-1 rounded text-xs">{t.edit}</button>
+                      <button onClick={() => handleDelete(p.id)} className="btn-danger px-3 py-1 rounded text-xs">{t.delete}</button>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+          <Modal show={showModal} onClose={() => setShowModal(false)} title={editing ? t.editProduct : t.addProduct}>
+            <div className="space-y-3">
+              <div><label className="block text-sm text-gray-400 mb-1">{t.productName}</label>
+              <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">{t.productType}</label>
+              <select value={form.product_type} onChange={e => setForm({...form, product_type: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg">
+                <option value="goods">{t.goods}</option><option value="service">{t.service}</option>
+              </select></div>
+              <div><label className="block text-sm text-gray-400 mb-1">{t.category}</label>
+              <select value={form.category_id} onChange={e => setForm({...form, category_id: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg">
+                <option value="">{t.noCategory}</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-sm text-gray-400 mb-1">{t.unitPrice}</label>
+                <input type="number" value={form.unit_price} onChange={e => setForm({...form, unit_price: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+                <div><label className="block text-sm text-gray-400 mb-1">{t.currency}</label>
+                <input value={form.currency} onChange={e => setForm({...form, currency: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-sm text-gray-400 mb-1">{t.unit}</label>
+                <input value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+                <div><label className="block text-sm text-gray-400 mb-1">{t.stockQty}</label>
+                <input type="number" value={form.stock_quantity} onChange={e => setForm({...form, stock_quantity: e.target.value})} placeholder={form.product_type === "service" ? "—" : "0"} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+              </div>
+              <div><label className="block text-sm text-gray-400 mb-1">{t.sku}</label>
+              <input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">{t.description}</label>
+              <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" rows={2} /></div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={handleSave} className="btn-primary px-4 py-2 rounded-lg text-white font-medium text-sm flex-1">{t.save}</button>
+                <button onClick={() => setShowModal(false)} className="btn-secondary px-4 py-2 rounded-lg text-sm flex-1">{t.cancel}</button>
+              </div>
+            </div>
+          </Modal>
+          <Modal show={showCatModal} onClose={() => setShowCatModal(false)} title={t.addCategory}>
+            <div className="space-y-3">
+              <div><label className="block text-sm text-gray-400 mb-1">{t.catName}</label>
+              <input value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">{t.description}</label>
+              <input value={catForm.description} onChange={e => setCatForm({...catForm, description: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">{t.parentCat}</label>
+              <select value={catForm.parent_id} onChange={e => setCatForm({...catForm, parent_id: e.target.value})} className="input-field w-full px-3 py-2 rounded-lg">
+                <option value="">{t.noneParent}</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select></div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={handleSaveCat} className="btn-primary px-4 py-2 rounded-lg text-white font-medium text-sm flex-1">{t.save}</button>
+                <button onClick={() => setShowCatModal(false)} className="btn-secondary px-4 py-2 rounded-lg text-sm flex-1">{t.cancel}</button>
+              </div>
+            </div>
+          </Modal>
+        </div>
+      );
+    }
+
+    // ==================== Main App ====================
+    function App() {
+      const [lang, setLang] = useState("mn");
+      const [page, setPage] = useState("users");
+      const t = T[lang];
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        return (
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="card rounded-2xl p-8 text-center max-w-sm">
+              <p className="text-gray-400 mb-4">{t.notLoggedIn}</p>
+              <a href="login.html" className="btn-primary px-6 py-2 rounded-lg text-white font-medium inline-block">{t.goLogin}</a>
+            </div>
+          </div>
+        );
+      }
+
+      const pages = { users: UsersPage, products: ProductsPage };
+      const PageComponent = pages[page];
+
+      return (
+        <div className="flex min-h-screen">
+          {/* Sidebar */}
+          <div className="sidebar w-56 flex flex-col py-4 flex-shrink-0">
+            <div className="px-4 mb-6">
+              <h1 className="text-lg font-bold text-white">CRM</h1>
+              <p className="text-xs text-gray-500">Multi-Tenant SaaS</p>
+            </div>
+            <nav className="flex-1 space-y-1">
+              {[
+                ["users", t.users, "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"],
+                ["products", t.products, "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"]
+              ].map(([key, label, icon]) => (
+                <button key={key} onClick={() => setPage(key)} className={`nav-item w-full flex items-center gap-3 px-4 py-2.5 text-sm ${page === key ? "active" : "text-gray-400"}`}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={icon} /></svg>
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <div className="px-4 space-y-3">
+              <div className="flex gap-1">
+                <button onClick={() => setLang("mn")} className={`lang-btn px-2 py-1 rounded border text-xs font-medium ${lang === "mn" ? "active" : ""}`}>MN</button>
+                <button onClick={() => setLang("en")} className={`lang-btn px-2 py-1 rounded border text-xs font-medium ${lang === "en" ? "active" : ""}`}>EN</button>
+              </div>
+              <button onClick={() => { localStorage.removeItem("token"); window.location.href = "login.html"; }} className="text-gray-500 hover:text-gray-300 text-xs">{t.logout}</button>
+            </div>
+          </div>
+          {/* Content */}
+          <div className="flex-1 p-8">
+            <PageComponent t={t} />
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

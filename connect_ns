@@ -1,0 +1,11 @@
+#!/bin/bash
+# Connect to NS Server (STT Server)
+# IP: 161.118.212.47 | User: ubuntu
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+KEY="$SCRIPT_DIR/ns-server/stt-server.key"
+
+# Ensure key has correct permissions
+chmod 600 "$KEY" 2>/dev/null
+
+ssh -i "$KEY" ubuntu@161.118.212.47 "$@"
